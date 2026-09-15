@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Control ESP32 - Wokwi</title>
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <style>
+    :root {
+      --red-950: #210307;
+      --red-900: #43070d;
+      --red-800: #6d0b16;
+      --red-700: #a30f1f;
+      --red-600: #d51b31;
+      --red-500: #f0444f;
+      --red-300: #ff9297;
+      --ink: #160205;
+      --paper: #fff4f3;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Trebuchet MS", system-ui, sans-serif; }
+    body {
+      background:
+        linear-gradient(135deg, rgba(255, 89, 89, 0.18) 0 12%, transparent 12% 50%, rgba(94, 5, 14, 0.35) 50% 62%, transparent 62%),
+        linear-gradient(125deg, var(--red-950), var(--red-800) 48%, var(--red-600));
+      color: var(--paper); min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      padding: 1.5rem; overflow: hidden;
+    }
+
+    .card {
+      position: relative; background: linear-gradient(145deg, rgba(109, 11, 22, 0.98), rgba(33, 3, 7, 0.98));
+      width: min(720px, 100%); padding: 2.25rem; text-align: center; border: 1px solid var(--red-500);
+      clip-path: polygon(0 16px, 16px 0, calc(100% - 16px) 0, 100% 16px, 100% calc(100% - 16px), calc(100% - 16px) 100%, 16px 100%, 0 calc(100% - 16px));
+      box-shadow: 0 24px 60px rgba(20, 0, 3, 0.65), inset 0 0 0 1px rgba(255, 146, 151, 0.18);
+    }
+    .card::before, .card::after { content: ""; position: absolute; height: 2px; background: var(--red-500); opacity: 0.8; }
+    .card::before { width: 42%; top: 12px; left: 29%; }
+    .card::after { width: 42%; bottom: 12px; right: 29%; }
+
+    .display-box {
+      background: var(--ink); padding: 1.35rem; margin-bottom: 1.75rem; border: 1px solid var(--red-700);
+      clip-path: polygon(0 10px, 10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px));
+      box-shadow: inset 0 0 28px rgba(213, 27, 49, 0.25);
+    }
+    .display-caption, .panel-title { color: var(--red-300); font-size: 0.7rem; font-weight: bold; letter-spacing: 0.18em; text-transform: uppercase; }
+    .display-caption { margin-bottom: 0.25rem; }
+    .display-val { font-size: 4.5rem; font-weight: bold; color: var(--red-300); font-family: monospace; text-shadow: 0 0 18px rgba(240, 68, 79, 0.75); }
+
+    .control-layout { display: grid; grid-template-columns: 1fr 0.9fr; gap: 1.5rem; text-align: left; }
+    .control-panel { min-width: 0; }
+    .panel-title { margin-bottom: 0.85rem; }
+    .switches-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 0; }
+    .switch-btn {
+      background: var(--red-900); border: 1px solid var(--red-700); clip-path: polygon(0 8px, 8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%);
+      padding: 12px 6px 14px; cursor: pointer; user-select: none; transition: all 0.15s ease; color: var(--paper);
+    }
+    .switch-btn:hover { border-color: var(--red-300); background: var(--red-800); transform: translateY(-3px); }
+    .switch-btn.active { border-color: var(--red-300); background: linear-gradient(145deg, var(--red-600), var(--red-800)); box-shadow: 0 0 18px rgba(240, 68, 79, 0.45); }
+    .switch-btn.active:hover { background: var(--red-500); border-color: #fff; }
+    .sw-label { display: block; color: var(--red-300); font-size: 0.65rem; letter-spacing: 0.1em; margin-bottom: 0.5rem; }
+    .lever-track { position: relative; width: 22px; height: 54px; margin: 0 auto 0.45rem; background: var(--ink); border: 1px solid var(--red-700); clip-path: polygon(0 5px, 5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%); }
+    .lever-knob { position: absolute; left: 3px; bottom: 3px; width: 14px; height: 24px; background: var(--red-500); box-shadow: 0 0 9px rgba(240, 68, 79, 0.7); transition: transform 0.15s ease; }
+    .switch-btn.active .lever-knob { transform: translateY(-21px); background: var(--paper); box-shadow: 0 0 10px var(--red-300); }
+    .sw-val { font-size: 1.35rem; font-weight: bold; color: #fff; }
+
+    .binary-input { width: 100%; padding: 0.75rem 0.8rem; background: var(--ink); border: 1px solid var(--red-700); color: var(--red-300); font: bold 1.35rem monospace; letter-spacing: 0.25em; text-align: center; outline: none; }
+    .binary-input:focus { border-color: var(--red-300); box-shadow: 0 0 14px rgba(240, 68, 79, 0.3); }
+    .keypad { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 0.75rem; }
+    .key-btn { padding: 0.7rem; background: var(--red-800); border: 1px solid var(--red-600); color: #fff; cursor: pointer; font: bold 1.1rem monospace; clip-path: polygon(0 6px, 6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%); transition: 0.15s ease; }
+    .key-btn:hover { background: var(--red-600); transform: translateY(-2px); }
+    .key-btn.wide { grid-column: span 2; background: var(--red-600); }
+
+    .status { margin-top: 1.75rem; font-size: 0.8rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--red-300); transition: color 0.3s; }
+    .status.connected { color: #ffb3b6; }
+    .status.disconnected { color: #ff4f5d; }
+
+    @media (max-width: 430px) {
+      .card { padding: 1.75rem 1.25rem; }
+      .display-val { font-size: 3.75rem; }
+      .control-layout { grid-template-columns: 1fr; gap: 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="display-box">
+      <div class="display-caption">Salida decimal</div>
+      <div id="dec-val" class="display-val">0</div>
+    </div>
+
+    <div class="control-layout">
+      <section class="control-panel">
+        <h2 class="panel-title">Palancas binarias</h2>
+        <div class="switches-grid">
+      <button class="switch-btn" id="btn-sw1" onclick="toggleSwitch(0)">
+        <span class="sw-label">B3</span>
+        <span class="lever-track"><span class="lever-knob"></span></span>
+        <div class="sw-val">0</div>
+      </button>
+      <button class="switch-btn" id="btn-sw2" onclick="toggleSwitch(1)">
+        <span class="sw-label">B2</span>
+        <span class="lever-track"><span class="lever-knob"></span></span>
+        <div class="sw-val">0</div>
+      </button>
+      <button class="switch-btn" id="btn-sw3" onclick="toggleSwitch(2)">
+        <span class="sw-label">B1</span>
+        <span class="lever-track"><span class="lever-knob"></span></span>
+        <div class="sw-val">0</div>
+      </button>
+      <button class="switch-btn" id="btn-sw4" onclick="toggleSwitch(3)">
+        <span class="sw-label">B0</span>
+        <span class="lever-track"><span class="lever-knob"></span></span>
+        <div class="sw-val">0</div>
+      </button>
+        </div>
+      </section>
+
+      <section class="control-panel">
+        <h2 class="panel-title">Teclado binario</h2>
+        <input id="binary-input" class="binary-input" maxlength="4" inputmode="numeric" pattern="[01]*" placeholder="0000" aria-label="Ingresar número binario" oninput="actualizarDesdeBinario(this.value)">
+        <div class="keypad">
+          <button class="key-btn" onclick="teclaBinaria('0')">0</button>
+          <button class="key-btn" onclick="teclaBinaria('1')">1</button>
+          <button class="key-btn" onclick="borrarBinario()">Borrar</button>
+        </div>
+      </section>
+    </div>
+
+    <p class="status" id="status">Conectando...</p>
+  </div>
+
+  <script>
+    const TOPIC_PUB = 'wokwi/esp32/parcial_cmd';
+    const TOPIC_SUB = 'wokwi/esp32/parcial_switches';
+    
+    let currentBits = [0, 0, 0, 0]; // b3, b2, b1, b0
+    let isConnected = false;
+    const statusEl = document.getElementById('status');
+
+    function setConnected() {
+      isConnected = true;
+      statusEl.innerText = 'Conectado';
+      statusEl.className = 'status connected';
+    }
+
+    function setDisconnected() {
+      isConnected = false;
+      statusEl.innerText = 'No Conectado';
+      statusEl.className = 'status disconnected';
+    }
+
+    // Si después de 4 segundos no logra conectar, mostrar "No Conectado"
+    const connectionTimeout = setTimeout(() => {
+      if (!isConnected) {
+        setDisconnected();
+      }
+    }, 4000);
+
+    let client;
+    try {
+      client = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
+        connectTimeout: 4000,
+        reconnectPeriod: 3000
+      });
+
+      client.on('connect', () => {
+        clearTimeout(connectionTimeout);
+        setConnected();
+        client.subscribe(TOPIC_SUB);
+      });
+
+      client.on('message', (topic, message) => {
+        try {
+          const data = JSON.parse(message.toString());
+          if (data.decimal !== undefined) {
+            document.getElementById('dec-val').innerText = data.decimal;
+          }
+          if (data.b3 !== undefined) {
+            currentBits = [data.b3, data.b2, data.b1, data.b0];
+            actualizarUI();
+          }
+        } catch (e) {}
+      });
+
+      client.on('error', () => {
+        setDisconnected();
+      });
+
+      client.on('offline', () => {
+        setDisconnected();
+      });
+
+      client.on('close', () => {
+        if (!isConnected) {
+          setDisconnected();
+        }
+      });
+    } catch (err) {
+      setDisconnected();
+    }
+
+    // Soporte adicional para polling HTTP si se sirve desde el servidor web de Wokwi
+    async function checkHttpBackend() {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 1500);
+        const res = await fetch('/data', { signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (res.ok) {
+          const d = await res.json();
+          document.getElementById('dec-val').innerText = d.dec > 9 ? '-' : d.dec;
+          currentBits = [d.b3, d.b2, d.b1, d.b0];
+          actualizarUI();
+          setConnected();
+          return true;
+        }
+      } catch (e) {}
+      return false;
+    }
+
+    if (window.location.protocol.startsWith('http')) {
+      setInterval(async () => {
+        const ok = await checkHttpBackend();
+        if (!ok && !isConnected) {
+          setDisconnected();
+        }
+      }, 1000);
+    }
+
+    function actualizarUI() {
+      const binaryInput = document.getElementById('binary-input');
+      if (binaryInput && document.activeElement !== binaryInput) {
+        binaryInput.value = currentBits.join('');
+      }
+      currentBits.forEach((val, i) => {
+        const btn = document.getElementById(`btn-sw${i+1}`);
+        if (btn) {
+          btn.querySelector('.sw-val').innerText = val;
+          if (val === 1) btn.classList.add('active');
+          else btn.classList.remove('active');
+        }
+      });
+    }
+
+    function toggleSwitch(index) {
+      currentBits[index] = currentBits[index] === 1 ? 0 : 1;
+      actualizarUI();
+      enviarComando();
+    }
+
+    function actualizarDesdeBinario(value) {
+      const cleanValue = value.replace(/[^01]/g, '').slice(0, 4);
+      const binaryInput = document.getElementById('binary-input');
+      binaryInput.value = cleanValue;
+      if (cleanValue) {
+        currentBits = cleanValue.padStart(4, '0').split('').map(Number);
+        actualizarUI();
+        enviarComando();
+      }
+    }
+
+    function teclaBinaria(bit) {
+      const binaryInput = document.getElementById('binary-input');
+      actualizarDesdeBinario((binaryInput.value + bit).slice(-4));
+    }
+
+    function borrarBinario() {
+      const binaryInput = document.getElementById('binary-input');
+      actualizarDesdeBinario(binaryInput.value.slice(0, -1));
+    }
+
+    function enviarComando() {
+      const payload = JSON.stringify({
+        b3: currentBits[0],
+        b2: currentBits[1],
+        b1: currentBits[2],
+        b0: currentBits[3]
+      });
+      if (client && client.connected) {
+        client.publish(TOPIC_PUB, payload);
+      }
+    }
+  </script>
+</body>
+</html>
