@@ -107,8 +107,8 @@ print("IP:", wifi.ifconfig()[0])
 
 BROKER = "broker.emqx.io"
 
-TOPIC_PUBLICAR = b"wokwi/esp32/ACA VA EL NOMBRE DEL PROYECTO DE WOKWIK"
-TOPIC_RECIBIR = b"wokwi/esp32/parcial_cmd"
+TOPIC_PUBLICAR = b"wokwi/esp32/binary_lab_switches"
+TOPIC_RECIBIR = b"wokwi/esp32/binary_lab_cmd"
 
 
 # =========================================================
@@ -148,9 +148,10 @@ def publicar_estado():
 # RECIBIR DATOS DESDE EL HTML
 # =========================================================
 
-def recibir_mensaje(topic, mensaje):
+def recibir_mensaje(_topic, mensaje):
 
     global bits
+    del _topic
 
     try:
 

@@ -1,0 +1,7 @@
+{
+  "python.analysis.extraPaths": ["${workspaceFolder}/typings"],
+  "python.analysis.diagnosticSeverityOverrides": {
+    "reportMissingModuleSource": "none",
+    "reportUnusedParameter": "none"
+  }
+}
